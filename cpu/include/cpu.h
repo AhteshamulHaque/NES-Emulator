@@ -6,6 +6,11 @@
 #include "registers.h"
 #include "ram.h"
 
+#define ASL_ACCUMULATOR 0x0A
+#define LSR_ACCUMULATOR 0x4A
+#define ROL_ACCUMULATOR 0x2A
+#define ROR_ACCUMULATOR 0x6A
+
 class CPU6502 {
     private:
         uint8_t opcode; // current fetched instruction from memory

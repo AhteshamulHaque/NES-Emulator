@@ -1,5 +1,6 @@
 #include "cpu.h"
 #include "ram.h"
+#include <stdio.h>
 
 CPU6502::CPU6502(): ram(nullptr) {
 
@@ -276,7 +277,6 @@ void CPU6502::fetch() {
     regs.PC++;
 }
 
-
 void CPU6502::connect(RAM &ram) {
     this->ram = &ram;
 }
@@ -295,8 +295,8 @@ bool CPU6502::getNthBit(uint8_t num, uint8_t n) {
  * depending on the mode.
  */
 
-void CPU6502::IMP() {
-}
+void CPU6502::IMP() {}
+void CPU6502::ACC() {}
 
 void CPU6502::IMM() {
     // ADC #$nn
@@ -317,7 +317,7 @@ void CPU6502::XZP() {
     // ADC $nn, X
     // M = memory[$nn+X]
     fetch();
-    addr =  (uint8_t)(regs.X + opcode);
+    addr = (uint8_t)(opcode + regs.X);
     operand = ram->read(addr);
 }
 
@@ -325,7 +325,7 @@ void CPU6502::YZP() {
     // LDX $nn, Y
     // M = memory[$nn+Y]
     fetch();
-    addr = (uint8_t)(regs.Y + opcode);
+    addr = (uint8_t)(opcode + regs.Y);
     operand = ram->read(addr);
 }
 
@@ -408,7 +408,7 @@ void CPU6502::ZIY() {
     // M = memory[$addr+Y]
     fetch();
     addr = ram->read(opcode);
-    addr |= (ram->read(opcode+1) << 8);
+    addr |= (ram->read((uint8_t)(opcode+1)) << 8); // zero page access only
     ram->has_page_crossed(addr, addr+regs.Y);
     addr += regs.Y;
     operand = ram->read(addr);
@@ -419,13 +419,11 @@ void CPU6502::REL() {
     // BCC $abcd
     // PC += $ab ($ab is signed 8 bit)
     fetch();
-    operand = opcode;
+    addr = opcode;
+    fetch();    // to go past the third byte
     // implement the rest of the logic in branch inst i.e
     // converting it into signed 8 bit and using it then.
 }
-
-void CPU6502::ACC() {}
-
 
 /************************************************************************
  ****************** INSTRUCTION SET EMULATION ***************************
@@ -441,83 +439,135 @@ void CPU6502::LDA() {
 
 void CPU6502::ADC() {
     // A = A + M + C
-    uint16_t temp = regs.A + operand + regs.flags.C;
+    uint16_t A = regs.A + operand + regs.flags.C;
 
-    regs.flags.C = (temp > 0xFF);
-    regs.flags.Z = (temp == 0);
-    regs.flags.N = getNthBit(temp, 7);
-    regs.flags.V = (temp^regs.A)&(temp^operand)&0x80;
+    regs.flags.C = (A > 0xFF);
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = getNthBit(regs.A, 7);
 
-    regs.A = temp;
+    /* 0x00 - 0x7F represents 0 to 127 in signed integer
+     * 0x80 - 0xFF represents -128 to -1 in signed integer
+     * Conditions to set V flag:
+     *      1. If two positive numbers overflow
+     *      2. If two negative numbers overflow
+     * Note: Opposite sign number never overflow. Using
+     * this logic to set the value of flag
+     */
+    regs.flags.V = !((regs.A <= 0x7F && operand >= 0x80) ||
+                    (operand <= 0x7F && operand >= 0x80));
+    regs.A = A;
     cpu_cycle++;
 }
 
 void CPU6502::AND() {
-
-    regs.A = regs.A & operand;
+    // A = A & M
+    regs.A &= operand;
 
     regs.flags.Z = (regs.A == 0);
-    regs.flags.Z = getNthBit(regs.A, 7);
+    regs.flags.N = getNthBit(regs.A, 7);
 }
 
 void CPU6502::ASL() {
+    // operand << 1 (write-back when done), Accumulator << 1
+    uint8_t value;
+    uint8_t result;
 
+    // handle accumulator instruction separately
+    if(opcode == ASL_ACCUMULATOR) {
+        value = regs.A; // store the value to set flags
+        regs.A <<= 1;
+        result = regs.A; // store the result to set Z flag
+    } else {
+        value = operand;
+        result = value << 1;
+        ram->write(addr, result);
+    }
+
+    regs.flags.C = getNthBit(value, 7);
+    regs.flags.N = getNthBit(value, 6);
+    regs.flags.Z = (result == 0);
 }
 
 void CPU6502::BCC() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(!regs.flags.C) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BCS() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(regs.flags.C) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BEQ() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(regs.flags.Z) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BIT() {
-
+    uint8_t result = regs.A & addr;
+    regs.flags.Z = (result == 0);
+    regs.flags.V = (getNthBit(result, 6));
+    regs.flags.N = (getNthBit(result, 7));
 }
 
 void CPU6502::BMI() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(regs.flags.N) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BNE() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(!regs.flags.Z) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BPL() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(!regs.flags.N) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BRK() {
-
 }
 
 void CPU6502::BVC() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(!regs.flags.V) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::BVS() {
-
+    // PC = PC + 2(added in addressing mode) + M
+    if(regs.flags.V) {
+        regs.PC += (int8_t)addr;
+    }
 }
 
 void CPU6502::CLC() {
-
+    regs.flags.C = 0;
 }
 
 void CPU6502::CLD() {
-
+    regs.flags.D = 0;
 }
 
 void CPU6502::CLI() {
-
+    regs.flags.I = 0;
 }
 
 void CPU6502::CLV() {
-
+    regs.flags.V = 0;
 }
 
 void CPU6502::CMP() {
