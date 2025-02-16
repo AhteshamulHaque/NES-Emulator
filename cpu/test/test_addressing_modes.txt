@@ -1,0 +1,1045 @@
+#include "catch2/catch_all.hpp"
+#include "cpu.h"
+#include "ram.h"
+
+TEST_CASE("Immediate Addressing - 5 Test Cases", "[6502]") {
+
+    CPU6502 cpu;
+    RAM ram;
+
+    cpu.connect(ram);
+
+    cpu.A = 0;
+    cpu.PC = 0x1000;
+
+    SECTION("Positive Value") {
+        ram.write(cpu.PC, 0x20); // Value to load
+        cpu.IMM(); 
+        REQUIRE(cpu.PC == 0x1002);
+        REQUIRE(cpu.addr == 0x1000);
+        REQUIRE(cpu.operand == 0x20); // N flag (Negative)
+    }
+
+    SECTION("Negative Value") {
+        setMemory(memory, PC, 0x80); // Value to load
+        LDA(A, PC, memory);
+        REQUIRE(A == 0x80);
+        REQUIRE(PC == 0x1002);
+        REQUIRE((A & 0x80) != 0); // N flag
+        REQUIRE(A != 0); // Z flag
+    }
+
+    SECTION("Zero Value") {
+        setMemory(memory, PC, 0x00); // Value to load
+        LDA(A, PC, memory);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE((A & 0x80) == 0); // N flag
+        REQUIRE(A == 0); // Z flag
+    }
+
+    SECTION("Max Value ($FF)") {
+        setMemory(memory, PC, 0xFF); // Value to load
+        LDA(A, PC, memory);
+        REQUIRE(A == 0xFF);
+        REQUIRE(PC == 0x1002);
+        REQUIRE((A & 0x80) != 0); // N flag
+        REQUIRE(A != 0); // Z flag
+    }
+
+    SECTION("Another Positive Value") {
+        setMemory(memory, PC, 0x42); // Value to load
+        LDA(A, PC, memory);
+        REQUIRE(A == 0x42);
+        REQUIRE(PC == 0x1002);
+        REQUIRE((A & 0x80) == 0); // N flag
+        REQUIRE(A != 0); // Z flag
+    }
+}
+
+
+TEST_CASE("Implied Addressing - 5 Test Cases", "[6502]") {
+    uint8_t A = 0;
+    uint8_t X = 0;
+    uint8_t Y = 0;
+    uint8_t C = 0; // Carry flag
+    uint8_t N = 0; // Negative flag
+    uint8_t Z = 0; // Zero flag
+    uint16_t PC = 0x1000;
+
+
+    SECTION("INX - Wrap Around") {
+        X = 0xFF;
+        INX(X, PC); // Your INX function
+        REQUIRE(X == 0x00);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("DEX - Wrap Around") {
+        X = 0x00;
+        DEX(X, PC); // Your DEX function
+        REQUIRE(X == 0xFF);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("CLC - Clear Carry") {
+        C = 1;
+        CLC(C, PC); // Your CLC function
+        REQUIRE(C == 0);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("SEC - Set Carry") {
+        C = 0;
+        SEC(C, PC); // Your SEC function
+        REQUIRE(C == 1);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("LSR A - Shift Right, Zero Result") {
+        A = 0x01;
+        LSR_A(A, N, Z, PC); // Your LSR A function
+        REQUIRE(A == 0x00);
+        REQUIRE(N == 0); // Negative flag should be 0
+        REQUIRE(Z == 1); // Zero flag should be 1
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("LSR A - Shift Right, Positive Result") {
+        A = 0x04;
+        LSR_A(A, N, Z, PC); // Your LSR A function
+        REQUIRE(A == 0x02);
+        REQUIRE(N == 0); // Negative flag should be 0
+        REQUIRE(Z == 0); // Zero flag should be 0
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("ASL A - Shift Left, Carry Set") {
+        A = 0x80;
+        ASL_A(A, C, N, Z, PC); // Your ASL A function
+        REQUIRE(A == 0x00);
+        REQUIRE(C == 1); // Carry flag should be 1
+        REQUIRE(N == 0); // Negative flag should be 0
+        REQUIRE(Z == 1); // Zero flag should be 1
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("ASL A - Shift Left, Negative Set") {
+        A = 0x40;
+        ASL_A(A, C, N, Z, PC); // Your ASL A function
+        REQUIRE(A == 0x80);
+        REQUIRE(C == 0); // Carry flag should be 0
+        REQUIRE(N == 1); // Negative flag should be 1
+        REQUIRE(Z == 0); // Zero flag should be 0
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("BRK - Break") {
+        BRK(A, PC); // Your BRK function (often sets a flag, but we're checking PC)
+        REQUIRE(PC == 0x1001); // PC should be incremented
+        // Other BRK effects (like pushing registers to the stack) would be tested here.
+    }
+}
+
+
+TEST_CASE("Accumulator Addressing - 5 Test Cases", "[6502]") {
+    uint8_t A = 0;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+    uint8_t C = 0;
+    uint16_t PC = 0x1000;  // PC is still incremented, even though no memory access
+
+    SECTION("LSR A - Shift Right, Zero Result") {
+        A = 0x01;
+        LSR_A(A, N, Z, PC); // Your LSR A function
+        REQUIRE(A == 0x00);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+        REQUIRE(PC == 0x1001); // PC should still increment
+    }
+
+    SECTION("LSR A - Shift Right, Positive Result") {
+        A = 0x04;
+        LSR_A(A, N, Z, PC);
+        REQUIRE(A == 0x02);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("ASL A - Shift Left, Carry Set") {
+        A = 0x80;
+        ASL_A(A, C, N, Z, PC);
+        REQUIRE(A == 0x00);
+        REQUIRE(C == 1);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("ASL A - Shift Left, Negative Set") {
+        A = 0x40;
+        ASL_A(A, C, N, Z, PC);
+        REQUIRE(A == 0x80);
+        REQUIRE(C == 0);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("ROR A - Rotate Right, Carry In") {
+        A = 0x01;
+        C = 1; // Carry is set *before* the instruction
+        ROR_A(A, C, N, Z, PC); // Your ROR A function
+        REQUIRE(A == 0x80); // Carry shifts into the MSB
+        REQUIRE(C == 0); // The original LSB shifted out to the Carry
+        REQUIRE(N == 1); // Negative flag set
+        REQUIRE(Z == 0); // Zero flag not set
+        REQUIRE(PC == 0x1001);
+    }
+
+    SECTION("ROL A - Rotate Left, Carry In") {
+      A = 0x80;
+      C = 1;
+      ROL_A(A, C, N, Z, PC);
+      REQUIRE(A == 0x01);
+      REQUIRE(C == 1);
+      REQUIRE(N == 0);
+      REQUIRE(Z == 0);
+      REQUIRE(PC == 0x1001);
+    }
+
+}
+
+
+TEST_CASE("Absolute Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load from Low Address") {
+        uint16_t targetAddress = 0x0010;
+        setMemory16(memory, PC, targetAddress); // Address to load from
+        setMemory(memory, targetAddress, 0x2A);   // Value at that address
+        LDA_ABS(A, PC, memory, N, Z); // Your LDA Absolute function
+        REQUIRE(A == 0x2A);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from High Address") {
+        uint16_t targetAddress = 0xFFF0;
+        setMemory16(memory, PC, targetAddress); // Address to load from
+        setMemory(memory, targetAddress, 0x85);   // Value at that address
+        LDA_ABS(A, PC, memory, N, Z);
+        REQUIRE(A == 0x85);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 1); // Negative flag set
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load Zero") {
+        uint16_t targetAddress = 0x5000;
+        setMemory16(memory, PC, targetAddress);
+        setMemory(memory, targetAddress, 0x00);
+        LDA_ABS(A, PC, memory, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store to Low Address") {
+        uint16_t targetAddress = 0x0020;
+        A = 0x4B;
+        STA_ABS(A, PC, memory, targetAddress); // Your STA Absolute function
+        REQUIRE(getMemory(memory, targetAddress) == 0x4B);
+        REQUIRE(PC == 0x1003);
+    }
+
+    SECTION("Store to High Address") {
+        uint16_t targetAddress = 0xFEA0;
+        A = 0x9C;
+        STA_ABS(A, PC, memory, targetAddress);
+        REQUIRE(getMemory(memory, targetAddress) == 0x9C);
+        REQUIRE(PC == 0x1003);
+    }
+
+    SECTION("Load Max Value") {
+        uint16_t targetAddress = 0x6000;
+        setMemory16(memory, PC, targetAddress);
+        setMemory(memory, targetAddress, 0xFF);
+        LDA_ABS(A, PC, memory, N, Z);
+        REQUIRE(A == 0xFF);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from Address near Zero Page") {
+        uint16_t targetAddress = 0x0105; // Just above zero page
+        setMemory16(memory, PC, targetAddress);
+        setMemory(memory, targetAddress, 0x17);
+        LDA_ABS(A, PC, memory, N, Z);
+        REQUIRE(A == 0x17);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Store to Address near Zero Page") {
+      uint16_t targetAddress = 0x0110;
+      A = 0x3D;
+      STA_ABS(A, PC, memory, targetAddress);
+      REQUIRE(getMemory(memory, targetAddress) == 0x3D);
+      REQUIRE(PC == 0x1003);
+    }
+
+}
+
+
+TEST_CASE("Absolute X ABIexed Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint8_t X = 0; // ABIex register
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load with Small Offset") {
+        uint16_t baseAddress = 0x2000;
+        X = 0x05;
+        uint16_t targetAddress = baseAddress + X; // 0x2005
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x3C);
+        LDA_ABSX(A, PC, memory, baseAddress, X, N, Z); // Your LDA Absolute X function
+        REQUIRE(A == 0x3C);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Larger Offset") {
+        uint16_t baseAddress = 0x3000;
+        X = 0x20;
+        uint16_t targetAddress = baseAddress + X; // 0x3020
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x7A);
+        LDA_ABSX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x7A);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Offset Near Page Boundary") {
+        uint16_t baseAddress = 0x40FF; // Just before a page boundary
+        X = 0x02;
+        uint16_t targetAddress = baseAddress + X; // 0x4101 (crosses page)
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x95);
+        LDA_ABSX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x95);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 1); // Negative flag set
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Zero Offset") {
+        uint16_t baseAddress = 0x5000;
+        X = 0x00;
+        uint16_t targetAddress = baseAddress + X; // 0x5000
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x00);
+        LDA_ABSX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store with Offset") {
+        uint16_t baseAddress = 0x6000;
+        X = 0x10;
+        uint16_t targetAddress = baseAddress + X;
+        A = 0x5F;
+        STA_ABSX(A, PC, memory, baseAddress, X); // Your STA Absolute X function
+        setMemory16(memory, PC, baseAddress); // Set the base address in memory
+        REQUIRE(getMemory(memory, targetAddress) == 0x5F);
+        REQUIRE(PC == 0x1003);
+    }
+
+    SECTION("Load with Large Offset (Wraparound)") {
+      uint16_t baseAddress = 0x7000;
+      X = 0x80; // Large offset
+      uint16_t targetAddress = baseAddress + X;
+      setMemory16(memory, PC, baseAddress);
+      setMemory(memory, targetAddress & 0xFFFF, 0xA3); // Value (wraps around if needed)
+      LDA_ABSX(A, PC, memory, baseAddress, X, N, Z);
+      REQUIRE(A == 0xA3);
+      REQUIRE(PC == 0x1003);
+      REQUIRE(N == 1);
+      REQUIRE(Z == 0);
+    }
+
+}
+
+
+TEST_CASE("Absolute Y ABIexed Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint8_t Y = 0; // ABIex register
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load with Small Offset") {
+        uint16_t baseAddress = 0x2000;
+        Y = 0x05;
+        uint16_t targetAddress = baseAddress + Y; // 0x2005
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x3C);
+        LDA_ABSY(A, PC, memory, baseAddress, Y, N, Z); // Your LDA Absolute Y function
+        REQUIRE(A == 0x3C);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Larger Offset") {
+        uint16_t baseAddress = 0x3000;
+        Y = 0x20;
+        uint16_t targetAddress = baseAddress + Y; // 0x3020
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x7A);
+        LDA_ABSY(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x7A);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Offset Near Page Boundary") {
+        uint16_t baseAddress = 0x40FF; // Just before a page boundary
+        Y = 0x02;
+        uint16_t targetAddress = baseAddress + Y; // 0x4101 (crosses page)
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x95);
+        LDA_ABSY(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x95);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 1); // Negative flag set
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Zero Offset") {
+        uint16_t baseAddress = 0x5000;
+        Y = 0x00;
+        uint16_t targetAddress = baseAddress + Y; // 0x5000
+        setMemory16(memory, PC, baseAddress);
+        setMemory(memory, targetAddress, 0x00);
+        LDA_ABSY(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1003);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store with Offset") {
+        uint16_t baseAddress = 0x6000;
+        Y = 0x10;
+        uint16_t targetAddress = baseAddress + Y;
+        A = 0x5F;
+        STA_ABSY(A, PC, memory, baseAddress, Y); // Your STA Absolute Y function
+        setMemory16(memory, PC, baseAddress); // Set the base address in memory
+        REQUIRE(getMemory(memory, targetAddress) == 0x5F);
+        REQUIRE(PC == 0x1003);
+    }
+
+    SECTION("Load with Large Offset (Wraparound)") {
+      uint16_t baseAddress = 0x7000;
+      Y = 0x80; // Large offset
+      uint16_t targetAddress = baseAddress + Y;
+      setMemory16(memory, PC, baseAddress);
+      setMemory(memory, targetAddress & 0xFFFF, 0xA3); // Value (wraps around if needed)
+      LDA_ABSY(A, PC, memory, baseAddress, Y, N, Z);
+      REQUIRE(A == 0xA3);
+      REQUIRE(PC == 0x1003);
+      REQUIRE(N == 1);
+      REQUIRE(Z == 0);
+    }
+
+}
+
+
+TEST_CASE("Absolute ABIirect Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load from ABIirect Address") {
+        uint16_t pointerAddress = 0x2000;  // Address holding the actual address
+        uint16_t targetAddress = 0x3050;  // The actual address to load from
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory16(memory, PC, pointerAddress); // Set the pointer address in PC
+        setMemory(memory, targetAddress, 0x42);    // Value at the target address
+
+        LDA_ABI(A, PC, memory, N, Z); // Your LDA ABIirect function
+        REQUIRE(A == 0x42);
+        REQUIRE(PC == 0x1002); // Increment by 2, not 3
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load Zero from ABIirect Address") {
+        uint16_t pointerAddress = 0x2002;
+        uint16_t targetAddress = 0x4000;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory16(memory, PC, pointerAddress);
+        setMemory(memory, targetAddress, 0x00);
+
+        LDA_ABI(A, PC, memory, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Load Negative Value from ABIirect Address") {
+        uint16_t pointerAddress = 0x2004;
+        uint16_t targetAddress = 0x5000;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory16(memory, PC, pointerAddress);
+        setMemory(memory, targetAddress, 0x80);
+
+        LDA_ABI(A, PC, memory, N, Z);
+        REQUIRE(A == 0x80);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("ABIirect Address near Zero Page") {
+        uint16_t pointerAddress = 0x0005;  // Pointer in zero page
+        uint16_t targetAddress = 0x60A0;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory16(memory, PC, pointerAddress);
+        setMemory(memory, targetAddress, 0x15);
+
+        LDA_ABI(A, PC, memory, N, Z);
+        REQUIRE(A == 0x15);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("ABIirect Address at Top of Memory") {
+      uint16_t pointerAddress = 0xFFFE;
+      uint16_t targetAddress = 0x1234;
+      setMemory16(memory, pointerAddress, targetAddress);
+      setMemory16(memory, PC, pointerAddress);
+      setMemory(memory, targetAddress, 0xAB);
+
+      LDA_ABI(A, PC, memory, N, Z);
+      REQUIRE(A == 0xAB);
+      REQUIRE(PC == 0x1002);
+      REQUIRE(N == 1);
+      REQUIRE(Z == 0);
+    }
+
+    SECTION("Store to ABIirect Address") {
+        uint16_t pointerAddress = 0x2006;
+        uint16_t targetAddress = 0x7000;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory16(memory, PC, pointerAddress);
+        A = 0x9D;
+
+        STA_ABI(A, PC, memory); // Your STA ABIirect function
+        REQUIRE(getMemory(memory, targetAddress) == 0x9D);
+        REQUIRE(PC == 0x1002);
+    }
+
+}
+
+
+TEST_CASE("Zero Page Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load from Low Zero Page Address") {
+        uint8_t zeroPageAddress = 0x05;
+        setMemory(memory, zeroPageAddress, 0x2A);
+        LDA_ZP(A, PC, memory, zeroPageAddress, N, Z); // Your LDA Zero Page function
+        REQUIRE(A == 0x2A);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from High Zero Page Address") {
+        uint8_t zeroPageAddress = 0xFF; // Highest zero page address
+        setMemory(memory, zeroPageAddress, 0x85);
+        LDA_ZP(A, PC, memory, zeroPageAddress, N, Z);
+        REQUIRE(A == 0x85);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load Zero from Zero Page") {
+        uint8_t zeroPageAddress = 0x70;
+        setMemory(memory, zeroPageAddress, 0x00);
+        LDA_ZP(A, PC, memory, zeroPageAddress, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store to Zero Page Address") {
+        uint8_t zeroPageAddress = 0x10;
+        A = 0x4B;
+        STA_ZP(A, PC, memory, zeroPageAddress); // Your STA Zero Page function
+        REQUIRE(getMemory(memory, zeroPageAddress) == 0x4B);
+        REQUIRE(PC == 0x1002);
+    }
+
+    SECTION("Load Max Value from Zero Page") {
+        uint8_t zeroPageAddress = 0x30;
+        setMemory(memory, zeroPageAddress, 0xFF);
+        LDA_ZP(A, PC, memory, zeroPageAddress, N, Z);
+        REQUIRE(A == 0xFF);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+}
+
+
+TEST_CASE("Zero Page X ABIexed Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint8_t X = 0; // ABIex register
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load with Small Offset") {
+        uint8_t baseAddress = 0x05;
+        X = 0x02;
+        uint8_t targetAddress = baseAddress + X; // 0x07
+        setMemory(memory, targetAddress, 0x3C);
+        LDA_XZP(A, PC, memory, baseAddress, X, N, Z); // Your LDA Zero Page X function
+        REQUIRE(A == 0x3C);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Larger Offset") {
+        uint8_t baseAddress = 0x10;
+        X = 0x20; // Wraps to 0x30 in zero page
+        uint8_t targetAddress = (baseAddress + X) & 0xFF; // Zero page wrap
+        setMemory(memory, targetAddress, 0x7A);
+        LDA_XZP(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x7A);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Zero Offset") {
+        uint8_t baseAddress = 0x50;
+        X = 0x00;
+        uint8_t targetAddress = baseAddress + X; // 0x50
+        setMemory(memory, targetAddress, 0x00);
+        LDA_XZP(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store with Offset") {
+        uint8_t baseAddress = 0x20;
+        X = 0x10;
+        uint8_t targetAddress = (baseAddress + X) & 0xFF;
+        A = 0x5F;
+        STA_XZP(A, PC, memory, baseAddress, X); // Your STA Zero Page X function
+        REQUIRE(getMemory(memory, targetAddress) == 0x5F);
+        REQUIRE(PC == 0x1002);
+    }
+
+    SECTION("Load with Max Offset (Wraparound)") {
+        uint8_t baseAddress = 0xF0;
+        X = 0x20; // Wraps around in zero page
+        uint8_t targetAddress = (baseAddress + X) & 0xFF;
+        setMemory(memory, targetAddress, 0xA3);
+        LDA_XZP(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0xA3);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from Zero Page Boundary") {
+        uint8_t baseAddress = 0xFF;
+        X = 0x01;
+        uint8_t targetAddress = (baseAddress + X) & 0xFF; // Wraps to 0x00
+        setMemory(memory, targetAddress, 0x7B);
+        LDA_XZP(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x7B);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+}
+
+
+TEST_CASE("Zero Page Y ABIexed Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint8_t Y = 0; // ABIex register
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load with Small Offset") {
+        uint8_t baseAddress = 0x05;
+        Y = 0x02;
+        uint8_t targetAddress = baseAddress + Y; // 0x07
+        setMemory(memory, targetAddress, 0x3C);
+        LDA_YZP(A, PC, memory, baseAddress, Y, N, Z); // Your LDA Zero Page Y function
+        REQUIRE(A == 0x3C);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Larger Offset") {
+        uint8_t baseAddress = 0x10;
+        Y = 0x20; // Wraps to 0x30 in zero page
+        uint8_t targetAddress = (baseAddress + Y) & 0xFF; // Zero page wrap
+        setMemory(memory, targetAddress, 0x7A);
+        LDA_YZP(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x7A);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load with Zero Offset") {
+        uint8_t baseAddress = 0x50;
+        Y = 0x00;
+        uint8_t targetAddress = baseAddress + Y; // 0x50
+        setMemory(memory, targetAddress, 0x00);
+        LDA_YZP(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store with Offset") {
+        uint8_t baseAddress = 0x20;
+        Y = 0x10;
+        uint8_t targetAddress = (baseAddress + Y) & 0xFF;
+        A = 0x5F;
+        STA_YZP(A, PC, memory, baseAddress, Y); // Your STA Zero Page Y function
+        REQUIRE(getMemory(memory, targetAddress) == 0x5F);
+        REQUIRE(PC == 0x1002);
+    }
+
+    SECTION("Load with Max Offset (Wraparound)") {
+        uint8_t baseAddress = 0xF0;
+        Y = 0x20; // Wraps around in zero page
+        uint8_t targetAddress = (baseAddress + Y) & 0xFF;
+        setMemory(memory, targetAddress, 0xA3);
+        LDA_YZP(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0xA3);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from Zero Page Boundary") {
+        uint8_t baseAddress = 0xFF;
+        Y = 0x01;
+        uint8_t targetAddress = (baseAddress + Y) & 0xFF; // Wraps to 0x00
+        setMemory(memory, targetAddress, 0x7B);
+        LDA_YZP(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x7B);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+}
+
+
+TEST_CASE("Zero Page ABIirect X ABIexed Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint8_t X = 0;
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load from ABIirect Address (Small Offset)") {
+        uint8_t baseAddress = 0x05;
+        X = 0x02;
+        uint8_t pointerAddress = (baseAddress + X) & 0xFF; // Zero page wrap
+        uint16_t targetAddress = 0x2050;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress, 0x42);
+
+        LDA_IZX(A, PC, memory, baseAddress, X, N, Z); // Your LDA ABIirect Zero Page X function
+        REQUIRE(A == 0x42);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from ABIirect Address (Larger Offset)") {
+        uint8_t baseAddress = 0x10;
+        X = 0x20; // Wraps in zero page
+        uint8_t pointerAddress = (baseAddress + X) & 0xFF;
+        uint16_t targetAddress = 0x30A0;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress, 0x85);
+
+        LDA_IZX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x85);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load Zero from ABIirect Address") {
+        uint8_t baseAddress = 0x50;
+        X = 0x00;
+        uint8_t pointerAddress = baseAddress + X;
+        uint16_t targetAddress = 0x4000;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress, 0x00);
+
+        LDA_IZX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store to ABIirect Address") {
+        uint8_t baseAddress = 0x20;
+        X = 0x10;
+        uint8_t pointerAddress = (baseAddress + X) & 0xFF;
+        uint16_t targetAddress = 0x5000;
+        setMemory16(memory, pointerAddress, targetAddress);
+        A = 0x4B;
+
+        STA_IZX(A, PC, memory, baseAddress, X); // Your STA ABIirect Zero Page X function
+        REQUIRE(getMemory(memory, targetAddress) == 0x4B);
+        REQUIRE(PC == 0x1002);
+    }
+
+    SECTION("Load from ABIirect Address (Wraparound)") {
+        uint8_t baseAddress = 0xFF; // Near zero page boundary
+        X = 0x01;  // Causes wraparound
+        uint8_t pointerAddress = (baseAddress + X) & 0xFF; // Wraps to 0x00
+        uint16_t targetAddress = 0x60A0;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress, 0x15);
+
+        LDA_IZX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x15);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from ABIirect Address (Pointer Wraparound)") {
+        uint8_t baseAddress = 0xFE;
+        X = 0x02;
+        uint8_t pointerAddress = (baseAddress + X) & 0xFF; // Wraps to 0x00
+        uint16_t targetAddress = 0x7000;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress, 0x7C);
+
+        LDA_IZX(A, PC, memory, baseAddress, X, N, Z);
+        REQUIRE(A == 0x7C);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+}
+
+
+TEST_CASE("Zero Page ABIirect Y ABIexed Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint8_t A = 0;
+    uint8_t Y = 0;
+    uint16_t PC = 0x1000;
+    uint8_t N = 0;
+    uint8_t Z = 0;
+
+    SECTION("Load from ABIirect Address (Small Offset)") {
+        uint8_t baseAddress = 0x05;
+        uint16_t pointerAddress = 0x0005; // Zero page pointer
+        uint16_t targetAddress = 0x2050;
+        Y = 0x02;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress + Y, 0x42); // Target address + offset
+
+        LDA_IZY(A, PC, memory, baseAddress, Y, N, Z); // Your LDA ABIirect Zero Page Y function
+        REQUIRE(A == 0x42);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load from ABIirect Address (Larger Offset)") {
+        uint8_t baseAddress = 0x10;
+        uint16_t pointerAddress = 0x0010;
+        uint16_t targetAddress = 0x30A0;
+        Y = 0x20;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress + Y, 0x85);
+
+        LDA_IZY(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x85);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 1);
+        REQUIRE(Z == 0);
+    }
+
+    SECTION("Load Zero from ABIirect Address") {
+        uint8_t baseAddress = 0x50;
+        uint16_t pointerAddress = 0x0050;
+        uint16_t targetAddress = 0x4000;
+        Y = 0x00;
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress + Y, 0x00);
+
+        LDA_IZY(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x00);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 1);
+    }
+
+    SECTION("Store to ABIirect Address") {
+        uint8_t baseAddress = 0x20;
+        uint16_t pointerAddress = 0x0020;
+        uint16_t targetAddress = 0x5000;
+        Y = 0x10;
+        setMemory16(memory, pointerAddress, targetAddress);
+        A = 0x4B;
+
+        STA_IZY(A, PC, memory, baseAddress, Y); // Your STA ABIirect Zero Page Y function
+        REQUIRE(getMemory(memory, targetAddress + Y) == 0x4B);
+        REQUIRE(PC == 0x1002);
+    }
+
+    SECTION("Load from ABIirect Address (Page Boundary Crossing)") {
+        uint8_t baseAddress = 0xFE;  // Near zero page boundary
+        uint16_t pointerAddress = 0x00FE;
+        uint16_t targetAddress = 0x60FF; // Target near page boundary
+        Y = 0x02; // Causes page crossing
+        setMemory16(memory, pointerAddress, targetAddress);
+        setMemory(memory, targetAddress + Y, 0x15);
+
+        LDA_IZY(A, PC, memory, baseAddress, Y, N, Z);
+        REQUIRE(A == 0x15);
+        REQUIRE(PC == 0x1002);
+        REQUIRE(N == 0);
+        REQUIRE(Z == 0);
+
+        // Add timing test if you are emulating cycles.
+        // Page crossing adds an extra cycle.
+    }
+
+    SECTION("Load from ABIirect Address (Wraparound)") {
+      uint8_t baseAddress = 0xFF;  // Near zero page boundary
+      uint16_t pointerAddress = 0x00FF;
+      uint16_t targetAddress = 0x7000;
+      Y = 0x01;  // Causes wraparound
+      setMemory16(memory, pointerAddress, targetAddress);
+      setMemory(memory, targetAddress + Y, 0x7C);
+
+      LDA_IZY(A, PC, memory, baseAddress, Y, N, Z);
+      REQUIRE(A == 0x7C);
+      REQUIRE(PC == 0x1002);
+      REQUIRE(N == 0);
+      REQUIRE(Z == 0);
+    }
+
+}
+
+
+TEST_CASE("Relative Addressing - 5 Test Cases", "[6502]") {
+    uint8_t memory[65536] = {0};
+    uint16_t PC = 0x1000;
+
+    SECTION("Branch Forward (Positive Offset)") {
+        uint8_t offset = 0x05;
+        setMemory(memory, PC + 1, offset); // Offset stored after instruction
+        BEQ(PC, memory); // Your BEQ function (or similar branch instruction)
+        REQUIRE(PC == 0x1007); // PC + 2 + offset
+    }
+
+    SECTION("Branch Backward (Negative Offset)") {
+        uint8_t offset = 0xF0; // -16 in two's complement
+        setMemory(memory, PC + 1, offset);
+        BEQ(PC, memory);
+        REQUIRE(PC == 0x0FF2); // PC + 2 + offset
+    }
+
+    SECTION("Branch to Next Instruction (Zero Offset)") {
+        uint8_t offset = 0x00;
+        setMemory(memory, PC + 1, offset);
+        BEQ(PC, memory);
+        REQUIRE(PC == 0x1002); // PC + 2 + 0
+    }
+
+    SECTION("Branch Forward Near Page Boundary") {
+        PC = 0x10FF; // PC near page boundary
+        uint8_t offset = 0x02;
+        setMemory(memory, PC + 1, offset);
+        BEQ(PC, memory);
+        REQUIRE(PC == 0x1101); // Crosses page boundary
+    }
+
+    SECTION("Branch Backward Near Page Boundary") {
+        PC = 0x1100; // PC at start of page
+        uint8_t offset = 0xFE; // -2
+        setMemory(memory, PC + 1, offset);
+        BEQ(PC, memory);
+        REQUIRE(PC == 0x10FE); // Crosses page boundary
+    }
+
+    SECTION("Branch Forward Max Positive Offset") {
+        uint8_t offset = 0x7F; // Max positive offset (127)
+        setMemory(memory, PC + 1, offset);
+        BEQ(PC, memory);
+        REQUIRE(PC == 0x1081); // PC + 2 + 127
+    }
+
+    SECTION("Branch Backward Max Negative Offset") {
+        uint8_t offset = 0x80; // Max negative offset (-128)
+        setMemory(memory, PC + 1, offset);
+        BEQ(PC, memory);
+        REQUIRE(PC == 0x0F82); // PC + 2 - 128
+    }
+
+}
