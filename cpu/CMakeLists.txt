@@ -18,7 +18,9 @@ find_package(Catch2 REQUIRED)
 enable_testing()
 
 add_executable(CPUTests
-    test/test_LDA.cpp
+    test/test_addressing_modes.cpp
+    test/test_asl.cpp
+    test/test_adc.cpp
 )
 
 target_link_libraries(CPUTests PRIVATE Catch2::Catch2WithMain cpu)

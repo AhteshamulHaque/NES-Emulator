@@ -13,6 +13,14 @@
 #define LDA_YAB 0xB9
 #define LDA_ZIY 0xB1
 
+/* Addressing mode needs to be tested only once because after
+ * this only the instruction core functionality needs to be
+ * tested which will reduce the number of test cases in other
+ * test files. Using LDA instruction to test the addressing
+ * modes.
+ * 
+ * In other instruction test only the result and flags.
+ */
 TEST_CASE("LDA Immediate Addressing Mode", "[LDA]") {
 
     CPU6502 cpu;

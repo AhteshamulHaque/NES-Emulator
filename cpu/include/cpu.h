@@ -6,16 +6,18 @@
 #include "registers.h"
 #include "ram.h"
 
-#define ASL_ACCUMULATOR 0x0A
-#define LSR_ACCUMULATOR 0x4A
-#define ROL_ACCUMULATOR 0x2A
-#define ROR_ACCUMULATOR 0x6A
-
 class CPU6502 {
     private:
         uint8_t opcode; // current fetched instruction from memory
-        uint8_t operand; // memory content to be used by the instruction
-        uint16_t addr; // memory address referenced in the instruction
+        /*
+         * `operand_addr` is the address at which operand is found.
+         * It helps in pointing to either RAM memory address or
+         * ACCUMULATOR address depending on the addressing mode
+         */
+        uint8_t *operand_addr;
+        uint8_t **operand;  // points to `operand_addr`. (optional)
+        // uint8_t operand;
+        uint16_t addr;   // for doing calculations for the CPU
         uint8_t cpu_cycle; // cycle count to execute the cpu instruction
 
     public:

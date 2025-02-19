@@ -16,10 +16,13 @@ class RAM {
 
     public:
         RAM();
+
+        // used by cpu addressing modes to check for page boundary cross
+        uint8_t cycle_count();
         uint8_t read(uint16_t);
         void write(uint16_t, uint8_t);
-        uint8_t cycle_count();
-        // used by cpu addressing modes to check for page boundary cross
+        // return - address of memory[index]
+        uint8_t *get_address(uint16_t);
         bool has_page_crossed(uint16_t, uint16_t);
         void reset_cycle(); // reset the cycle after a single execution
 };
