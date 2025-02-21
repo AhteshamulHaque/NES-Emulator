@@ -6,6 +6,8 @@
 #include "registers.h"
 #include "ram.h"
 
+#define STACK_BASE_ADDRESS 0x100
+
 class CPU6502 {
     private:
         uint8_t opcode; // current fetched instruction from memory
@@ -15,21 +17,30 @@ class CPU6502 {
          * ACCUMULATOR address depending on the addressing mode
          */
         uint8_t *operand_addr;
-        uint8_t **operand;  // points to `operand_addr`. (optional)
+        uint8_t **operand;  // points to `operand_addr`
         // uint8_t operand;
         uint16_t addr;   // for doing calculations for the CPU
         uint8_t cpu_cycle; // cycle count to execute the cpu instruction
 
+        // stack operation
+        void stack_push(uint8_t);
+        uint8_t stack_pop();
+
     public:
         struct StatusFlags {
-            bool C; // Carry Flag
-            bool Z; // Zero Flag
-            bool I; // Interrupt Disable
-            bool D; // Decimal Mode
-            bool B; // Break Command
-            bool U; // Unused (always 1)
-            bool V; // Overflow Flag
-            bool N; // Negative Flag
+            union {
+                uint8_t P;
+                struct { // !order of flags is important
+                    bool C: 1; // Carry Flag (bit 0)
+                    bool Z: 1; // Zero Flag (bit 1)
+                    bool I: 1; // Interrupt Disable (bit 2)
+                    bool D: 1; // Decimal Mode (bit 3)
+                    bool B: 1; // Break Command (bit 4)
+                    bool U: 1; // Unused (always 1) (bit 5)
+                    bool V: 1; // Overflow Flag (bit 6)
+                    bool N: 1; // Negative Flag (bit 7)
+                };
+            };
         };
 
         struct Registers {
@@ -55,7 +66,7 @@ class CPU6502 {
         /* Bus connection to different components
          * TODO: connect to PPU, APU, CONTROLLERS, CARTRIDGE
          */
-        void connect(RAM &ram);
+        void connect(RAM &);
         
         /* Instructions of 6502 CPU
          * XXX() is used for debugging the cpu

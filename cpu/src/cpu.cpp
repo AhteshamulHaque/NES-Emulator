@@ -4,11 +4,12 @@
 CPU6502::CPU6502(): ram(nullptr) {
 
     // initialise registers
-    regs.A = 0; regs.X = 0; regs.Y = 0; regs.PC = 0x8000; regs.SP = 0;
+    regs.A = 0; regs.X = 0; regs.Y = 0; regs.PC = 0x8000; regs.SP = 0xFF;
 
     // intialise flags
     regs.flags.C = regs.flags.Z = regs.flags.I = regs.flags.D = 0;
-    regs.flags.B = regs.flags.U = regs.flags.V = regs.flags.N = 0;
+    regs.flags.B = regs.flags.V = regs.flags.N = 0;
+    regs.flags.U = 1;
 
     // initialise helpful variables
     opcode = 0; addr = 0; operand = &operand_addr;
@@ -156,6 +157,16 @@ void CPU6502::connect(RAM &ram) {
 bool CPU6502::getNthBit(uint8_t num, uint8_t n) {
     uint8_t mask = 1u << n; // The 'u' makes it an unsigned literal
     return (num & mask);
+}
+
+void CPU6502::stack_push(uint8_t value) {
+    ram->write(STACK_BASE_ADDRESS + regs.SP, value);
+    --regs.SP;
+}
+
+uint8_t CPU6502::stack_pop() {
+    ++regs.SP;
+    return ram->read(STACK_BASE_ADDRESS + regs.SP);
 }
 
 /*******************************************************************
@@ -379,10 +390,10 @@ void CPU6502::BEQ() {
 }
 
 void CPU6502::BIT() {
-    uint8_t result = regs.A & addr;
+    uint8_t result = regs.A & **operand;
     regs.flags.Z = (result == 0);
-    regs.flags.V = (getNthBit(result, 6));
-    regs.flags.N = (getNthBit(result, 7));
+    regs.flags.V = (getNthBit(**operand, 6));
+    regs.flags.N = (getNthBit(**operand, 7));
 }
 
 void CPU6502::BMI() {
@@ -407,6 +418,28 @@ void CPU6502::BPL() {
 }
 
 void CPU6502::BRK() {
+    /* BRK is an implied addressing mode instruction but the second
+     * byte that is immediate is skipped and PC + 2 is saved on the
+     * stack.
+     * push PC + 2 to stack
+     * push NV11DIZC flags to stack 
+     * PC = ($FFFE)
+     */
+    fetch(); // advance the PC, ignoring the opcode
+    uint8_t PC_high_byte = (regs.PC >> 8) & 0xFF; // Get the upper 8 bits
+    uint8_t PC_low_byte = regs.PC & 0xFF;        // Get the lower 8 bits
+
+    stack_push(PC_high_byte);
+    stack_push(PC_low_byte);
+
+    bool saved_B_flag = regs.flags.B;
+    regs.flags.B = 1;
+    stack_push(regs.flags.P);
+
+    regs.flags.B = saved_B_flag;
+    regs.flags.I = 1;
+    regs.PC = ram->read(0xFFFE);
+    regs.PC |= (ram->read(0xFFFF) << 8);
 }
 
 void CPU6502::BVC() {
@@ -440,155 +473,250 @@ void CPU6502::CLV() {
 }
 
 void CPU6502::CMP() {
-
+    regs.flags.C = (regs.A >= **operand);
+    regs.flags.Z = (regs.A == **operand);
+    regs.flags.N = getNthBit(regs.A - **operand, 7);
 }
 
 void CPU6502::CPX() {
-
+    regs.flags.C = (regs.X >= **operand);
+    regs.flags.Z = (regs.X == **operand);
+    regs.flags.N = getNthBit(regs.X - **operand, 7);
 }
 
 void CPU6502::CPY() {
-
+    regs.flags.C = (regs.Y >= **operand);
+    regs.flags.Z = (regs.Y == **operand);
+    regs.flags.N = getNthBit(regs.Y - **operand, 7);
 }
 
 void CPU6502::DEC() {
-
+    **operand -= 1;
+    regs.flags.Z = (**operand == 0);
+    regs.flags.N = getNthBit(**operand, 7);
 }
 
 void CPU6502::DEX() {
-
+    regs.X--;
+    regs.flags.Z = (regs.X == 0);
+    regs.flags.N = getNthBit(regs.X, 7);
 }
 
 void CPU6502::DEY() {
-
+    regs.Y--;
+    regs.flags.Z = (regs.Y == 0);
+    regs.flags.N = getNthBit(regs.Y, 7);
 }
 
 void CPU6502::EOR() {
-
+    regs.A = regs.A ^ **operand;
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = getNthBit(regs.A, 7);
 }
 
 void CPU6502::INC() {
-
+    **operand += 1;
+    regs.flags.Z = (**operand == 0);
+    regs.flags.N = getNthBit(**operand, 7);
 }
 
 void CPU6502::INX() {
-
+    regs.X++;
+    regs.flags.Z = (regs.X == 0);
+    regs.flags.N = getNthBit(regs.X, 7);
 }
 
 void CPU6502::INY() {
-
+    regs.Y++;
+    regs.flags.Z = (regs.Y == 0);
+    regs.flags.N = getNthBit(regs.Y, 7);
 }
 
 void CPU6502::JMP() {
-
+    regs.PC = addr;
 }
 
 void CPU6502::JSR() {
+    // push PC + 2 to stack
+    // PC = memory
+    uint8_t PC_high_byte = (regs.PC >> 8) & 0xFF; // Get the upper 8 bits
+    uint8_t PC_low_byte = regs.PC & 0xFF;        // Get the lower 8 bits
 
+    stack_push(PC_high_byte);
+    stack_push(PC_low_byte);
+
+    regs.PC = addr;
 }
 
 void CPU6502::LDX() {
-
+    regs.X = **operand;
+    regs.flags.Z = (regs.X == 0);
+    regs.flags.N = getNthBit(regs.X, 7);
 }
 
 void CPU6502::LDY() {
-
+    regs.Y = **operand;
+    regs.flags.Z = (regs.Y == 0);
+    regs.flags.N = getNthBit(regs.Y, 7);
 }
 
 void CPU6502::LSR() {
-
+    **operand >>= 1;
+    regs.flags.C = getNthBit(**operand, 0);
+    regs.flags.Z = (**operand == 0);
+    regs.flags.N = getNthBit(**operand, 7);
 }
 
 void CPU6502::NOP() {
-
+    // TODO
 }
 
 void CPU6502::ORA() {
-
+    // A = A | memory
+    regs.A |= **operand;
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = getNthBit(regs.A, 7);
 }
 
 void CPU6502::PHA() {
-
+    stack_push(regs.A);
 }
 
 void CPU6502::PHP() {
+    // ($0100 + SP) = NV11DIZC
+    // SP = SP - 1
+    bool saved_B_flag = regs.flags.B;
+    regs.flags.B = 1;
+    stack_push(regs.flags.P);
 
+    regs.flags.B = saved_B_flag;
 }
 
 void CPU6502::PLA() {
+    // SP = SP + 1
+    // A = ($0100 + SP)
+    regs.A = stack_pop();
 
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = (getNthBit(regs.A, 7));
 }
 
 void CPU6502::PLP() {
-
+    // SP = SP + 1
+    // NVxxDIZC = ($0100 + SP)
+    regs.flags.P = stack_pop();
+    
+    // Note: Note that the effect of changing I is delayed
+    // one instruction because the flag is changed after IRQ
+    // is polled, delaying the effect until IRQ is polled in
+    //the next instruction like with CLI and SEI.
+    // TODO - maybe delay setting of I flag till next instruction
 }
 
 void CPU6502::ROL() {
-
+    // C <- [76543210] <- C
+    regs.flags.C = getNthBit(**operand, 7);
+    **operand <<= 1;
+    **operand = (regs.flags.C) ? (**operand | 0x01) : (**operand & 0xFE);
 }
 
 void CPU6502::ROR() {
-
+    // C -> [76543210] -> C
+    regs.flags.C = getNthBit(**operand, 0);
+    **operand >>= 1;
+    **operand = (regs.flags.C) ? (**operand | 0x80) : (**operand & 0x7F);
 }
 
 void CPU6502::RTI() {
-
+    // pull NVxxDIZC flags from stack
+    // pull PC from stack
+    regs.flags.P = stack_pop();
+    
+    regs.PC = stack_pop();
+    regs.PC |= (stack_pop() << 8);
 }
 
 void CPU6502::RTS() {
+    // pull PC from stack
+    // PC = PC + 1
+    regs.PC = stack_pop();
+    regs.PC |= (stack_pop() << 8); 
 
+    regs.PC++;
 }
 
 void CPU6502::SBC() {
-
+    // A = A + ~memory + C
+    uint16_t result = regs.A - **operand + regs.flags.C;
+    regs.A = (uint8_t)result;
+    regs.flags.C = !(result < 0x00);
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = (getNthBit(regs.A, 7)); 
+    regs.flags.V = ((regs.A <= 0x7F && **operand <= 0x7F && result > 0x7F) ||
+                    (regs.A >= 0x80 && **operand >= 0x80 && result >= 0xFF));
 }
 
 void CPU6502::SEC() {
-
+    regs.flags.C = 1;
 }
 
 void CPU6502::SED() {
-
+    regs.flags.D = 1;
 }
 
 void CPU6502::SEI() {
-
+    regs.flags.I = 1;
 }
 
 void CPU6502::STA() {
-
+    **operand = regs.A;
 }
 
 void CPU6502::STX() {
-
+    **operand = regs.X;
 }
 
 void CPU6502::STY() {
-
+    **operand = regs.Y;
 }
 
 void CPU6502::TAX() {
+    regs.X = regs.A;
 
+    regs.flags.Z = (regs.X == 0);
+    regs.flags.N = getNthBit(regs.X, 7);
 }
 
 void CPU6502::TAY() {
+    regs.Y = regs.A;
 
+    regs.flags.Z = (regs.Y == 0);
+    regs.flags.N = getNthBit(regs.Y, 7);
 }
 
 void CPU6502::TSX() {
+    regs.X = regs.SP;
 
+    regs.flags.Z = (regs.X == 0);
+    regs.flags.N = getNthBit(regs.X, 7);
 }
 
 void CPU6502::TXA() {
+    regs.A = regs.X;
 
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = getNthBit(regs.A, 7);
 }
 
 void CPU6502::TXS() {
-
+    regs.SP = regs.X;
 }
 
 void CPU6502::TYA() {
+    regs.A = regs.Y;
 
+    regs.flags.Z = (regs.A == 0);
+    regs.flags.N = getNthBit(regs.A, 7);
 }
 
 

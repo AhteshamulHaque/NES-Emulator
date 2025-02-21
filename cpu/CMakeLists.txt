@@ -21,6 +21,12 @@ add_executable(CPUTests
     test/test_addressing_modes.cpp
     test/test_asl.cpp
     test/test_adc.cpp
+    test/test_and.cpp
+    test/test_bcc.cpp
+    test/test_bit.cpp
+    test/test_bmi.cpp
+    test/test_bne.cpp
+    test/test_brk.cpp
 )
 
 target_link_libraries(CPUTests PRIVATE Catch2::Catch2WithMain cpu)

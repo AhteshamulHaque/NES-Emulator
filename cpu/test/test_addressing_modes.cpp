@@ -1,5 +1,4 @@
 #include "catch2/catch_all.hpp"
-#include <stdio.h>
 
 #include "cpu.h"
 #include "ram.h"
@@ -21,6 +20,8 @@
  * 
  * In other instruction test only the result and flags.
  */
+
+ // TODO: All addressing modes has not been addressed
 TEST_CASE("LDA Immediate Addressing Mode", "[LDA]") {
 
     CPU6502 cpu;

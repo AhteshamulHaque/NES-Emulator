@@ -1,5 +1,4 @@
 #include "catch2/catch_all.hpp"
-#include <stdio.h>
 
 #include "cpu.h"
 #include "ram.h"
