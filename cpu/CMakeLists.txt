@@ -27,6 +27,8 @@ add_executable(CPUTests
     test/test_bmi.cpp
     test/test_bne.cpp
     test/test_brk.cpp
+    test/test_cmp.cpp
+    test/test_jmp.cpp
 )
 
 target_link_libraries(CPUTests PRIVATE Catch2::Catch2WithMain cpu)

@@ -509,7 +509,7 @@ void CPU6502::DEY() {
 }
 
 void CPU6502::EOR() {
-    regs.A = regs.A ^ **operand;
+    regs.A ^= **operand;
     regs.flags.Z = (regs.A == 0);
     regs.flags.N = getNthBit(regs.A, 7);
 }
