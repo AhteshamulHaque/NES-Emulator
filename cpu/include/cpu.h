@@ -1,5 +1,5 @@
-#ifndef CPU6502_H
-#define CPU6502_H
+#ifndef _CPU6502_H_
+#define _CPU6502_H_
 
 #include <iostream>
 #include <cstdint>
@@ -121,4 +121,4 @@ class CPU6502 {
         uint8_t execute();
 };
 
-#endif // !CPU6502_H
+#endif // !_CPU6502_H

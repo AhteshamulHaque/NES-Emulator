@@ -753,7 +753,7 @@ uint8_t CPU6502::execute() {
     // save the opcode because it changes during decode phase
     uint8_t idx = opcode;
     
-    // decode the instruction
+    // decode the instruction according to addressing mode
     (this->*vector[idx].first)();
 
     // execute the instruction
